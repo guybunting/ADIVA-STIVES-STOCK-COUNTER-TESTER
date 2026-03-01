@@ -27,6 +27,9 @@
         .secondary { background: transparent; border: 1px solid #444; color: #aaa; }
         .save-all-btn { background: #1a4a1a; color: #afffaf; border-color: #2a6a2a; position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         
+        /* Checkout Specific Button */
+        .checkout-confirm-btn { background: #d42a2a; color: white; border: none; font-weight: bold; margin-top: 15px; padding: 20px; width: 100%; border-radius: 8px; font-size: 18px; }
+
         .badge {
             background: #ff4d4d;
             color: white;
@@ -39,7 +42,7 @@
         }
 
         .scan-button-container { display: flex; flex-direction: column; gap: 5px; }
-        #reader { width: 100%; max-width: 500px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #000; }
+        #reader, #reader-checkout { width: 100%; max-width: 500px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #000; }
 
         input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; border: 1px solid #333; background: #111; color: #fff; box-sizing: border-box; font-size: 16px; }
         .hidden { display: none; }
@@ -53,7 +56,7 @@
         
         th:nth-child(1), td:nth-child(1) { width: 80px; }
         th:nth-child(2), td:nth-child(2) { width: 200px; }
-        th:nth-child(3), td:nth-child(3) { width: 120px; } /* Widened for buttons */
+        th:nth-child(3), td:nth-child(3) { width: 120px; } 
         th:nth-child(4), td:nth-child(4) { width: 80px; }
         th:nth-child(5), td:nth-child(5) { width: 80px; }
         th:nth-child(6), td:nth-child(6) { width: 120px; }
@@ -76,7 +79,6 @@
             text-align: center;
         }
 
-        /* Qty Button Styles */
         .qty-container { display: flex; align-items: center; justify-content: space-between; background: transparent; }
         .qty-btn { 
             background: #222; color: #fff; border: none; padding: 10px; width: 35px; height: 100%; 
@@ -110,18 +112,27 @@
     <div class="sub-title">St Ives Stock Counter</div>
 
     <div id="menu">
-        <button onclick="showView('scan')">🔍 SCAN BARCODE</button>
-        <button onclick="openManualAdd()">➕ MANUALLY ADD STOCK ITEM</button>
+        <button onclick="showView('scan')">🔍 ADD/EDIT STOCK</button>
+        <button onclick="startCheckoutView()">🛒 CHECK OUT</button>
         <button onclick="loadInventory()">📋 VIEW STOCK INVENTORY <span id="low-stock-badge" class="hidden"></span></button>
         <button onclick="showView('reports')">📄 PDF REPORTS</button>
+    </div>
+
+    <div id="view-checkout" class="hidden">
+        <h3>Check Out Mode</h3>
+        <p style="color: #888; font-size: 13px;">Scanning for items to remove from stock...</p>
+        <div id="reader-checkout"></div>
+        <div id="checkout-status"></div>
+        <button class="secondary" onclick="smartBack()">EXIT CHECK OUT</button>
     </div>
 
     <div id="view-scan" class="hidden">
         <div id="scan-area" style="padding:40px 20px; border:2px dashed #333; border-radius:15px; margin-bottom:20px; background:#0a0a0a;">
             <div id="reader" class="hidden"></div>
             <div class="scan-button-container">
-                <button type="button" onclick="document.getElementById('file-input').click()">📷 CAPTURE/UPLOAD<br><span style="font-size:10px; color:#888;">BEST FOR MOBILES</span></button>
-                <button type="button" id="live-scan-btn" onclick="startLiveScan()">🎥 LIVE SCAN<br><span style="font-size:10px; color:#888;">BEST FOR PC</span></button>
+                <button type="button" onclick="document.getElementById('file-input').click()">📷 CAPTURE/UPLOAD</button>
+                <button type="button" id="live-scan-btn" onclick="startLiveScan()">🎥 LIVE SCAN</button>
+                <button type="button" onclick="openManualAdd()">➕ MANUALLY ADD STOCK ITEM</button>
             </div>
             <input type="file" id="file-input" accept="image/*" capture="environment" style="display: none;" onchange="scanImage(this)">
             <div id="status-msg"></div>
@@ -172,6 +183,7 @@
     let sortConfig = { key: 'desc', dir: 1 };
     let isDataReady = false;
     let html5QrCode = null;
+    let checkoutScanner = null;
     let isCommitting = false; 
 
     /* --- NAVIGATION & "DIRTY" STATE LOGIC --- */
@@ -212,6 +224,7 @@
 
     async function smartBack() {
         await stopCamera();
+        await stopCheckoutCamera();
         if (hasUnsavedChanges()) {
             if (confirm("You have unsaved changes. Exit anyway?")) {
                 isCommitting = true; 
@@ -220,6 +233,85 @@
         } else {
             location.reload();
         }
+    }
+
+    /* --- CHECK OUT LOGIC --- */
+
+    async function startCheckoutView() {
+        showView('checkout');
+        await syncData(); 
+        if (!checkoutScanner) {
+            checkoutScanner = new Html5Qrcode("reader-checkout");
+        }
+        const config = { fps: 15, qrbox: { width: 250, height: 150 } };
+        checkoutScanner.start(
+            { facingMode: "environment" }, 
+            config, 
+            (barcode) => { handleCheckoutScan(barcode); }
+        ).catch(err => {
+            document.getElementById('checkout-status').innerText = "Camera access denied.";
+        });
+    }
+
+    async function stopCheckoutCamera() {
+        if (checkoutScanner && checkoutScanner.isScanning) {
+            try {
+                await checkoutScanner.stop();
+            } catch (err) { console.log("Stop failed", err); }
+        }
+    }
+
+    function handleCheckoutScan(barcode) {
+        checkoutScanner.pause();
+        const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
+        const modal = document.getElementById('modal-container');
+        
+        if (!item) {
+            modal.innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal-content" style="text-align:center;">
+                        <h3 style="color:#ff4d4d;">ITEM NOT FOUND</h3>
+                        <p>Barcode: ${barcode}</p>
+                        <button onclick="resumeCheckout()">TRY NEXT ITEM</button>
+                    </div>
+                </div>`;
+        } else {
+            modal.innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal-content">
+                        <h2 style="margin:0;">${item[2]}</h2>
+                        <p style="color:#888;">Current Stock: ${item[4]}</p>
+                        <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+                        <p>Would you like to remove one from stock?</p>
+                        <button class="checkout-confirm-btn" onclick="confirmCheckout('${barcode}', ${item[4]})">YES, REMOVE 1</button>
+                        <button class="secondary" onclick="resumeCheckout()">NO, CANCEL</button>
+                    </div>
+                </div>`;
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function resumeCheckout() {
+        document.getElementById('modal-container').classList.add('hidden');
+        checkoutScanner.resume();
+    }
+
+    async function confirmCheckout(barcode, current) {
+        const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
+        const body = {
+            action: "save",
+            barcode: barcode,
+            description: item[2],
+            category: item[3],
+            actual_stock: Math.max(0, current - 1),
+            min_required: item[5],
+            supplier: item[6],
+            supplier_part_num: item[7]
+        };
+        document.querySelector('.modal-content').innerHTML = "<h3>Updating Google Sheets...</h3>";
+        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
+        resumeCheckout();
+        syncData(); 
     }
 
     /* --- CORE SYNC, DATALISTS & LOW STOCK ALERTS --- */
@@ -372,7 +464,7 @@
     function adjustQty(bc, amount) {
         const input = document.getElementById(`input-stock-${bc}`);
         let currentVal = parseInt(input.value) || 0;
-        input.value = Math.max(0, currentVal + amount); // Prevent negative stock
+        input.value = Math.max(0, currentVal + amount); 
         trackChange(bc, 'stock', input);
     }
 
@@ -480,7 +572,7 @@
             try {
                 await html5QrCode.stop();
                 document.getElementById('reader').classList.add('hidden');
-                document.getElementById('live-scan-btn').innerText = "🎥 LIVE SCAN\nBEST FOR PC";
+                document.getElementById('live-scan-btn').innerText = "🎥 LIVE SCAN";
             } catch (err) { console.log("Camera stop failed", err); }
         }
     }
