@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    
+    <title>A'Diva Hair Design St Ives Stock Counter</title>
+    
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        /* 1.2 CSS Styling */
+        body { background-color: #000; color: #fff; font-family: sans-serif; margin: 0; padding: 10px; -webkit-text-size-adjust: 100%; }
+        .container { max-width: 1400px; margin: auto; text-align: center; }
+        h1 { margin-bottom: 2px; text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; }
+        .sub-title { color: #888; font-size: 12px; margin-bottom: 20px; }
+        
+        button { 
+            background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 18px; margin: 8px 0; 
+            cursor: pointer; width: 100%; border-radius: 8px; font-size: 16px; transition: 0.3s;
+            position: relative; 
+        }
+        button:hover { background: #333; }
+        .secondary { background: transparent; border: 1px solid #444; color: #aaa; }
+        .save-all-btn { background: #1a4a1a; color: #afffaf; border-color: #2a6a2a; position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        
+        .badge {
+            background: #ff4d4d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .scan-button-container { display: flex; flex-direction: column; gap: 5px; }
+        #reader { width: 100%; max-width: 500px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #000; }
+
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; border: 1px solid #333; background: #111; color: #fff; box-sizing: border-box; font-size: 16px; }
+        .hidden { display: none; }
+        
+        .search-container { margin: 15px 0; position: relative; }
+        .search-input { border: 1px solid #444; background: #0a0a0a; padding-left: 40px; }
+        .search-icon { position: absolute; left: 15px; top: 25px; color: #888; pointer-events: none; }
+
+        .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; border-radius: 8px; border: 1px solid #222; }
+        table { width: 100%; border-collapse: collapse; background: #050505; min-width: 950px; table-layout: fixed; } 
+        
+        th:nth-child(1), td:nth-child(1) { width: 80px; }
+        th:nth-child(2), td:nth-child(2) { width: 200px; }
+        th:nth-child(3), td:nth-child(3) { width: 120px; } /* Widened for buttons */
+        th:nth-child(4), td:nth-child(4) { width: 80px; }
+        th:nth-child(5), td:nth-child(5) { width: 80px; }
+        th:nth-child(6), td:nth-child(6) { width: 120px; }
+        th:nth-child(7), td:nth-child(7) { width: 220px; }
+        th:nth-child(8), td:nth-child(8) { width: 100px; }
+
+        th, td { border: 1px solid #222; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; }
+        th { background: #111; color: #888; font-size: 10px; text-transform: uppercase; padding: 10px 6px; cursor: pointer; }
+        
+        table input { 
+            width: 100%; 
+            border: 1px solid transparent !important; 
+            background: transparent !important; 
+            color: #fff !important; 
+            padding: 10px 6px !important; 
+            margin: 0 !important; 
+            font-size: 14px !important;
+            border-radius: 0 !important;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        /* Qty Button Styles */
+        .qty-container { display: flex; align-items: center; justify-content: space-between; background: transparent; }
+        .qty-btn { 
+            background: #222; color: #fff; border: none; padding: 10px; width: 35px; height: 100%; 
+            cursor: pointer; font-size: 18px; font-weight: bold; border-radius: 0; margin: 0; 
+        }
+        .qty-btn:hover { background: #444; }
+        .qty-btn:active { background: #00ff00; color: #000; }
+
+        .part-cell { display: flex; align-items: center; width: 100%; }
+        .url-link { color: #44aaff; text-decoration: none; font-size: 16px; padding: 0 8px; line-height: 1; }
+
+        .changed-cell { border: 1px solid #00ff00 !important; color: #00ff00 !important; background: rgba(0, 255, 0, 0.05) !important; font-weight: bold; }
+        
+        .pending-delete { background-color: rgba(255, 0, 0, 0.3) !important; opacity: 0.6; }
+        .pending-delete td { text-decoration: line-through; }
+        .low-stock-cell { background-color: rgba(255, 0, 0, 0.15) !important; }
+        .order-qty { color: #ffcc00; font-weight: bold; text-align: center; font-size: 14px; padding: 10px 6px; }
+
+        .category-title { background: #222; padding: 12px; border-left: 4px solid #fff; font-weight: bold; text-transform: uppercase; margin: 25px 0 5px 0; text-align: left; font-size: 13px; }
+        .row-del-btn { background: #300; color: #ff9999; border: 1px solid #500; padding: 8px 12px; font-size: 10px; width: auto; margin: 4px; }
+        .row-restore-btn { background: #1a4a1a; color: #fff; padding: 8px 12px; font-size: 10px; width: auto; margin: 4px; }
+
+        .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        .modal-content { background: #111; padding: 20px; border-radius: 12px; border: 1px solid #333; width: 95%; max-width: 500px; max-height: 85vh; overflow-y: auto; text-align: left; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>A'Diva Hair Design</h1>
+    <div class="sub-title">St Ives Stock Counter</div>
+
+    <div id="menu">
+        <button onclick="showView('scan')">🔍 SCAN BARCODE</button>
+        <button onclick="openManualAdd()">➕ MANUALLY ADD STOCK ITEM</button>
+        <button onclick="loadInventory()">📋 VIEW STOCK INVENTORY <span id="low-stock-badge" class="hidden"></span></button>
+        <button onclick="showView('reports')">📄 PDF REPORTS</button>
+    </div>
+
+    <div id="view-scan" class="hidden">
+        <div id="scan-area" style="padding:40px 20px; border:2px dashed #333; border-radius:15px; margin-bottom:20px; background:#0a0a0a;">
+            <div id="reader" class="hidden"></div>
+            <div class="scan-button-container">
+                <button type="button" onclick="document.getElementById('file-input').click()">📷 CAPTURE/UPLOAD<br><span style="font-size:10px; color:#888;">BEST FOR MOBILES</span></button>
+                <button type="button" id="live-scan-btn" onclick="startLiveScan()">🎥 LIVE SCAN<br><span style="font-size:10px; color:#888;">BEST FOR PC</span></button>
+            </div>
+            <input type="file" id="file-input" accept="image/*" capture="environment" style="display: none;" onchange="scanImage(this)">
+            <div id="status-msg"></div>
+        </div>
+        <form id="stockForm" class="hidden">
+            <label id="label_barcode">Barcode (Optional for manual add)</label>
+            <input type="text" id="f_barcode">
+            <label>Description</label><input type="text" id="f_desc" list="desc-list" required><datalist id="desc-list"></datalist>
+            <label>Category</label><input type="text" id="f_cat" list="cat-list" required><datalist id="cat-list"></datalist>
+            <label>Actual Stock</label><input type="number" id="f_actual" required>
+            <label>Required</label><input type="number" id="f_min">
+            <label>Supplier</label><input type="text" id="f_supp" list="supp-list"><datalist id="supp-list"></datalist>
+            <label>Part#/URL</label><input type="text" id="f_part">
+            <button type="submit">✅ SAVE TO SHEET</button>
+            <button type="button" id="delBtn" class="hidden secondary" style="color:red;" onclick="handleDeleteFromForm()">🗑️ DELETE PERMANENTLY</button>
+        </form>
+        <button onclick="smartBack()" class="secondary">BACK TO MENU</button>
+    </div>
+
+    <div id="view-inventory" class="hidden">
+        <button id="saveChangesBtn" class="save-all-btn hidden" onclick="reviewChanges()">💾 SAVE ALL CHANGES</button>
+        <h3>Inventory Dashboard</h3>
+        <div class="search-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="inventorySearch" class="search-input" placeholder="Search by description, barcode, or supplier..." onkeyup="renderActiveTable()">
+        </div>
+        <div id="table-container">Loading...</div>
+        <button class="secondary" onclick="smartBack()">BACK TO MENU</button>
+    </div>
+
+    <div id="view-reports" class="hidden">
+        <h3>Generate PDF Report</h3>
+        <button onclick="generatePDF(false)">DOWNLOAD FULL REPORT</button>
+        <button onclick="generatePDF(true)" style="border-color:#ff4d4d; color:#ff4d4d;">DOWNLOAD LOW STOCK ONLY</button>
+        <p id="pdfStatus" style="font-size:12px; color:#888; margin-top:10px;"></p>
+        <button class="secondary" onclick="location.reload()">BACK TO MENU</button>
+    </div>
+
+    <div id="modal-container" class="hidden"></div>
+</div>
+
+<script>
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby8LDn2ebBeCwkhqcqVsd3oGmkw09KbIYUcL4J0bBy7tXtFHgfDK-kNL0qnSBLlzcOV/exec';
+    let rawSheetData = []; 
+    let originalDataMap = {}; 
+    let pendingChanges = {}; 
+    let pendingDeletions = new Set();
+    let sortConfig = { key: 'desc', dir: 1 };
+    let isDataReady = false;
+    let html5QrCode = null;
+    let isCommitting = false; 
+
+    /* --- NAVIGATION & "DIRTY" STATE LOGIC --- */
+
+    function hasUnsavedChanges() {
+        if (isCommitting) return false; 
+        const dashboardChanges = Object.keys(pendingChanges).length > 0 || pendingDeletions.size > 0;
+        const formVisible = !document.getElementById('stockForm').classList.contains('hidden');
+        return dashboardChanges || formVisible;
+    }
+
+    window.addEventListener('beforeunload', function (e) {
+        if (hasUnsavedChanges()) {
+            e.preventDefault();
+            e.returnValue = ''; 
+        }
+    });
+
+    window.addEventListener('popstate', function (event) {
+        if (hasUnsavedChanges()) {
+            if (confirm("You have unsaved changes! Exit anyway?")) {
+                isCommitting = true; 
+                location.reload(); 
+            } else {
+                history.pushState(null, null, window.location.pathname);
+            }
+        } else {
+            location.reload(); 
+        }
+    });
+
+    function showView(v) {
+        document.getElementById('menu').classList.add('hidden');
+        document.querySelectorAll('.container > div:not(h1):not(.sub-title)').forEach(div => div.classList.add('hidden'));
+        document.getElementById('view-' + v).classList.remove('hidden');
+        history.pushState(null, null, window.location.pathname);
+    }
+
+    async function smartBack() {
+        await stopCamera();
+        if (hasUnsavedChanges()) {
+            if (confirm("You have unsaved changes. Exit anyway?")) {
+                isCommitting = true; 
+                location.reload();
+            }
+        } else {
+            location.reload();
+        }
+    }
+
+    /* --- CORE SYNC, DATALISTS & LOW STOCK ALERTS --- */
+
+    async function syncData() {
+        const badge = document.getElementById('low-stock-badge');
+        if(badge) badge.classList.add('hidden');
+        
+        try {
+            const resp = await fetch(SCRIPT_URL + "?t=" + new Date().getTime());
+            rawSheetData = await resp.json();
+            isDataReady = true;
+            updateDatalists();
+            checkLowStock(); 
+            return true;
+        } catch(e) { 
+            return false; 
+        }
+    }
+
+    function checkLowStock() {
+        const badge = document.getElementById('low-stock-badge');
+        if (!badge || !rawSheetData || rawSheetData.length <= 1) {
+            if(badge) badge.classList.add('hidden');
+            return;
+        }
+
+        const lowStockCount = rawSheetData.slice(1).filter(r => {
+            const stock = parseFloat(r[4] || 0);
+            const req = parseFloat(r[5] || 0);
+            return r[1] && stock < req;
+        }).length;
+
+        if (lowStockCount > 0) {
+            badge.innerText = `${lowStockCount} REQUIRED`;
+            badge.className = 'badge'; 
+        } else {
+            badge.className = 'hidden';
+        }
+    }
+
+    function updateDatalists() {
+        const dList = document.getElementById('desc-list');
+        const cList = document.getElementById('cat-list');
+        const sList = document.getElementById('supp-list');
+        if(!dList || !cList || !sList) return;
+        dList.innerHTML = ""; cList.innerHTML = ""; sList.innerHTML = "";
+        const descriptions = [...new Set(rawSheetData.slice(1).map(r => r[2]))].filter(Boolean).sort();
+        const categories = [...new Set(rawSheetData.slice(1).map(r => r[3]))].filter(Boolean).sort();
+        const suppliers = [...new Set(rawSheetData.slice(1).map(r => r[6]))].filter(Boolean).sort();
+        descriptions.forEach(d => { dList.innerHTML += `<option value="${d}">`; });
+        categories.forEach(c => { cList.innerHTML += `<option value="${c}">`; });
+        suppliers.forEach(s => { sList.innerHTML += `<option value="${s}">`; });
+    }
+
+    /* --- INVENTORY DASHBOARD --- */
+
+    async function loadInventory() {
+        showView('inventory');
+        const container = document.getElementById('table-container');
+        container.innerText = "Syncing with Google...";
+        await syncData();
+        renderActiveTable();
+    }
+
+    function renderActiveTable() {
+        const container = document.getElementById('table-container');
+        const searchQuery = document.getElementById('inventorySearch').value.toLowerCase();
+        container.innerHTML = "";
+        
+        let items = rawSheetData.slice(1).filter(r => r[1]).map(r => ({
+            bc: r[1], desc: r[2]||'', cat: r[3]||'Uncategorized', stock: r[4]||0, min: r[5]||0, supp: r[6]||'', part: (r[7]||'').toString(),
+            toOrder: Math.max(0, parseInt(r[5]||0) - parseInt(r[4]||0))
+        }));
+
+        if (searchQuery) {
+            items = items.filter(i => i.desc.toLowerCase().includes(searchQuery) || i.bc.toString().toLowerCase().includes(searchQuery) || i.supp.toLowerCase().includes(searchQuery));
+        }
+
+        items.forEach(i => { if(!originalDataMap[i.bc]) originalDataMap[i.bc] = JSON.stringify(i); });
+        const groups = items.reduce((acc, i) => { (acc[i.cat] || (acc[i.cat] = [])).push(i); return acc; }, {});
+        const sortedCats = Object.keys(groups).sort();
+        
+        if (sortedCats.length === 0 && searchQuery) {
+            container.innerHTML = "<p style='color:#888; margin-top:20px;'>No items found matching your search.</p>";
+            return;
+        }
+
+        sortedCats.forEach(cat => {
+            const section = document.createElement('div');
+            let sorted = groups[cat].sort((a,b) => {
+                let valA = a[sortConfig.key]; let valB = b[sortConfig.key];
+                if (typeof valA === 'string') return valA.toLowerCase().localeCompare(valB.toLowerCase()) * sortConfig.dir;
+                return (valA - valB) * sortConfig.dir;
+            });
+
+            section.innerHTML = `
+                <div class="category-title">${cat}</div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th onclick="setSort('bc')">Barcode</th>
+                                <th onclick="setSort('desc')">Description</th>
+                                <th onclick="setSort('stock')">Stock</th>
+                                <th onclick="setSort('min')">Required</th>
+                                <th>To Order</th>
+                                <th onclick="setSort('supp')">Supplier</th>
+                                <th onclick="setSort('part')">Part#/URL</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>${sorted.map(i => {
+                            const isDel = pendingDeletions.has(i.bc.toString());
+                            const isURL = i.part.toLowerCase().startsWith('http');
+                            const rowChanges = pendingChanges[i.bc] || null;
+                            const isChanged = (f) => rowChanges && rowChanges[f] != JSON.parse(originalDataMap[i.bc])[f];
+                            return `
+                            <tr id="row-${i.bc}" class="${isDel ? 'pending-delete' : ''}">
+                                <td style="font-size:9px; color:#777; padding: 10px 6px;">${i.bc}</td>
+                                <td><input type="text" class="${isChanged('desc')?'changed-cell':''}" value="${rowChanges?rowChanges.desc:i.desc}" onchange="trackChange('${i.bc}','desc',this)"></td>
+                                <td class="${parseInt(i.stock) < parseInt(i.min) ? 'low-stock-cell' : ''}">
+                                    <div class="qty-container">
+                                        <button class="qty-btn" onclick="adjustQty('${i.bc}', -1)">-</button>
+                                        <input type="number" id="input-stock-${i.bc}" class="${isChanged('stock')?'changed-cell':''}" value="${rowChanges?rowChanges.stock:i.stock}" onchange="trackChange('${i.bc}','stock',this)">
+                                        <button class="qty-btn" onclick="adjustQty('${i.bc}', 1)">+</button>
+                                    </div>
+                                </td>
+                                <td><input type="number" class="${isChanged('min')?'changed-cell':''}" value="${rowChanges?rowChanges.min:i.min}" onchange="trackChange('${i.bc}','min',this)"></td>
+                                <td class="order-qty">${i.toOrder}</td>
+                                <td><input type="text" class="${isChanged('supp')?'changed-cell':''}" value="${rowChanges?rowChanges.supp:i.supp}" onchange="trackChange('${i.bc}','supp',this)"></td>
+                                <td>
+                                    <div class="part-cell">
+                                        <input type="text" class="${isChanged('part')?'changed-cell':''}" value="${rowChanges?rowChanges.part:i.part}" onchange="trackChange('${i.bc}','part',this)">
+                                        ${isURL ? `<a href="${i.part}" target="_blank" class="url-link">🔗</a>` : ''}
+                                    </div>
+                                </td>
+                                <td style="text-align:center;">
+                                    <button class="row-del-btn" onclick="toggleDelete('${i.bc}')" style="display:${isDel ? 'none' : 'inline-block'}">DEL</button>
+                                    <button class="row-restore-btn" onclick="toggleDelete('${i.bc}')" style="display:${isDel ? 'inline-block' : 'none'}">RESTORE</button>
+                                </td>
+                            </tr>`;
+                        }).join('')}</tbody>
+                    </table>
+                </div>`;
+            container.appendChild(section);
+        });
+    }
+
+    function adjustQty(bc, amount) {
+        const input = document.getElementById(`input-stock-${bc}`);
+        let currentVal = parseInt(input.value) || 0;
+        input.value = Math.max(0, currentVal + amount); // Prevent negative stock
+        trackChange(bc, 'stock', input);
+    }
+
+    function setSort(key) {
+        sortConfig.dir = (sortConfig.key === key) ? sortConfig.dir * -1 : 1;
+        sortConfig.key = key;
+        renderActiveTable();
+    }
+
+    function toggleDelete(bc) {
+        const barcode = bc.toString();
+        if (pendingDeletions.has(barcode)) pendingDeletions.delete(barcode); else pendingDeletions.add(barcode);
+        renderActiveTable();
+        updateSaveButtonState();
+    }
+
+    function trackChange(bc, field, el) {
+        const orig = JSON.parse(originalDataMap[bc]);
+        if (el.value != orig[field]) {
+            el.classList.add('changed-cell');
+            if (!pendingChanges[bc]) pendingChanges[bc] = { ...orig };
+            pendingChanges[bc][field] = el.value;
+        } else {
+            el.classList.remove('changed-cell');
+            if (pendingChanges[bc]) {
+                pendingChanges[bc][field] = el.value;
+                let modified = false;
+                ['desc','stock','min','supp','part'].forEach(f => { if(pendingChanges[bc][f] != orig[f]) modified = true; });
+                if(!modified) delete pendingChanges[bc];
+            }
+        }
+        updateSaveButtonState();
+    }
+
+    function updateSaveButtonState() {
+        const total = Object.keys(pendingChanges).length + pendingDeletions.size;
+        document.getElementById('saveChangesBtn').classList.toggle('hidden', total === 0);
+        document.getElementById('saveChangesBtn').innerText = `💾 SAVE ALL CHANGES (${total})`;
+    }
+
+    function reviewChanges() {
+        const modal = document.getElementById('modal-container');
+        let log = "";
+        pendingDeletions.forEach(bc => {
+            const item = JSON.parse(originalDataMap[bc]);
+            log += `<div style="border-bottom:1px solid #333; padding:10px 0;"><span style="color:red; font-weight:bold;">[DELETE]</span> ${item.desc}</div>`;
+        });
+        for (const bc in pendingChanges) {
+            if(pendingDeletions.has(bc.toString())) continue;
+            const old = JSON.parse(originalDataMap[bc]);
+            const cur = pendingChanges[bc];
+            log += `<div style="border-bottom:1px solid #333; padding:10px 0;"><strong>${old.desc}</strong><br/>`;
+            ['desc','stock','min','supp','part'].forEach(f => {
+                if(old[f] != cur[f]) log += `<span style="color:#0f0; font-size:12px;">${f}: ${old[f]} → ${cur[f]}</span><br/>`;
+            });
+            log += `</div>`;
+        }
+        modal.innerHTML = `<div class="modal-overlay"><div class="modal-content"><h3>Review Changes</h3>${log}
+            <button onclick="commitChanges()">✅ CONFIRM & SYNC</button>
+            <button class="secondary" onclick="document.getElementById('modal-container').classList.add('hidden')">CANCEL</button>
+        </div></div>`;
+        modal.classList.remove('hidden');
+    }
+
+    async function commitChanges() {
+        const btn = document.querySelector('.modal-content button');
+        const modal = document.getElementById('modal-container');
+        btn.innerText = "SAVING..."; btn.disabled = true;
+        
+        isCommitting = true; 
+        
+        for (let bc of pendingDeletions) { 
+            await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ action: "delete", barcode: bc }) }); 
+        }
+        for (const bc in pendingChanges) {
+            if(pendingDeletions.has(bc.toString())) continue;
+            const i = pendingChanges[bc];
+            await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ action: "save", barcode: bc, description: i.desc, category: i.cat, actual_stock: i.stock, min_required: i.min, supplier: i.supp, supplier_part_num: i.part })});
+        }
+
+        pendingChanges = {};
+        pendingDeletions.clear();
+        originalDataMap = {}; 
+        isCommitting = false;
+        
+        modal.classList.add('hidden');
+        updateSaveButtonState();
+        loadInventory(); 
+    }
+
+    /* --- BARCODE & FORM LOGIC --- */
+
+    function openManualAdd() {
+        showView('scan');
+        document.getElementById('scan-area').classList.add('hidden');
+        document.getElementById('stockForm').classList.remove('hidden');
+        document.getElementById('f_barcode').value = "";
+        document.getElementById('f_barcode').readOnly = false;
+        document.getElementById('stockForm').reset();
+        document.getElementById('delBtn').classList.add('hidden');
+    }
+
+    async function stopCamera() {
+        if(html5QrCode && html5QrCode.isScanning) {
+            try {
+                await html5QrCode.stop();
+                document.getElementById('reader').classList.add('hidden');
+                document.getElementById('live-scan-btn').innerText = "🎥 LIVE SCAN\nBEST FOR PC";
+            } catch (err) { console.log("Camera stop failed", err); }
+        }
+    }
+
+    async function startLiveScan() {
+        const btn = document.getElementById('live-scan-btn');
+        const readerDiv = document.getElementById('reader');
+        if(readerDiv.classList.contains('hidden')) {
+            readerDiv.classList.remove('hidden');
+            btn.innerText = "🛑 STOP SCANNER";
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+            html5QrCode.start({ facingMode: "environment" }, config, (text) => { stopCamera(); processBarcode(text); }).catch(err => {
+                document.getElementById('status-msg').innerText = "Camera access denied."; stopCamera();
+            });
+        } else { stopCamera(); }
+    }
+
+    function processBarcode(text) {
+        document.getElementById('f_barcode').value = text;
+        document.getElementById('f_barcode').readOnly = true;
+        document.getElementById('stockForm').classList.remove('hidden');
+        document.getElementById('scan-area').classList.add('hidden');
+        const item = rawSheetData.find(r => r[1] && r[1].toString() === text);
+        if(item) {
+            document.getElementById('f_desc').value = item[2] || ""; document.getElementById('f_cat').value = item[3] || "";
+            document.getElementById('f_actual').value = item[4] || 0; document.getElementById('f_min').value = item[5] || 0;
+            document.getElementById('f_supp').value = item[6] || ""; document.getElementById('f_part').value = item[7] || "";
+            document.getElementById('delBtn').classList.remove('hidden');
+        } else {
+            document.getElementById('f_desc').value = ""; document.getElementById('f_cat').value = "";
+            document.getElementById('f_actual').value = ""; document.getElementById('f_min').value = "";
+            document.getElementById('f_supp').value = ""; document.getElementById('f_part').value = "";
+            document.getElementById('delBtn').classList.add('hidden');
+        }
+    }
+
+    async function scanImage(input) {
+        if (!input.files || input.files.length === 0) return;
+        const status = document.getElementById('status-msg');
+        status.innerText = "Processing...";
+        if(!isDataReady) await syncData();
+        const staticScanner = new Html5Qrcode("reader-hidden");
+        try {
+            const text = await staticScanner.scanFile(input.files[0], true);
+            status.innerText = ""; processBarcode(text);
+        } catch (err) { status.innerText = "No Barcode found."; }
+    }
+
+    document.getElementById('stockForm').onsubmit = async (e) => {
+        e.preventDefault();
+        isCommitting = true; 
+        const body = {
+            action: "save", barcode: document.getElementById('f_barcode').value,
+            description: document.getElementById('f_desc').value, category: document.getElementById('f_cat').value,
+            actual_stock: document.getElementById('f_actual').value, min_required: document.getElementById('f_min').value,
+            supplier: document.getElementById('f_supp').value, supplier_part_num: document.getElementById('f_part').value
+        };
+        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
+        location.reload();
+    };
+
+    async function handleDeleteFromForm() {
+        if(!confirm("Delete item permanently?")) return;
+        isCommitting = true; 
+        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "delete", barcode: document.getElementById('f_barcode').value }) });
+        location.reload();
+    }
+
+    /* --- PDF GENERATION --- */
+
+    async function generatePDF(lowOnly) {
+        const status = document.getElementById('pdfStatus');
+        status.innerText = "Syncing and generating PDF..."; await syncData();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('l', 'mm', 'a4');
+        const now = new Date();
+        const dateStr = now.toLocaleString();
+        const fileStamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const items = rawSheetData.slice(1).filter(r => r[1]).map(r => ({ bc: r[1], desc: r[2], cat: r[3], stock: r[4], min: r[5], supp: r[6], part: (r[7]||'').toString() }));
+        const reportItems = lowOnly ? items.filter(i => parseInt(i.stock) < parseInt(i.min)) : items;
+        doc.setFontSize(18); doc.text("A'Diva Hair Design Stock Report", 14, 15);
+        doc.setFontSize(10); doc.text(`Generated: ${dateStr}`, 14, 22);
+        doc.autoTable({
+            head: [['Category', 'Barcode', 'Description', 'Stock', 'Required', 'To Order', 'Supplier', 'Part#/URL']],
+            body: reportItems.map(i => [i.cat, i.bc, i.desc, i.stock, i.min, Math.max(0, i.min - i.stock), i.supp, i.part.toLowerCase().startsWith('http') ? "LINK" : i.part]),
+            startY: 28, theme: 'grid', headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255] }, styles: { fontSize: 8 },
+            didDrawCell: (data) => {
+                if (data.section === 'body' && data.column.index === 7 && data.cell.text[0] === 'LINK') {
+                    const rowData = reportItems[data.row.index];
+                    doc.link(data.cell.x, data.cell.y, data.cell.width, data.cell.height, { url: rowData.part });
+                    doc.setTextColor(0, 0, 255);
+                }
+            }
+        });
+        doc.save(`A-Diva_StockReport_${fileStamp}.pdf`); status.innerText = "PDF Downloaded.";
+    }
+
+    window.onload = syncData;
+</script>
+<div id="reader-hidden" style="display: none;"></div>
+</body>
+</html>
