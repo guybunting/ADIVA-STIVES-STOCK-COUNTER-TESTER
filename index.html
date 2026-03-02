@@ -12,7 +12,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
     
     <style>
-        /* 1.2 CSS Styling */
+        /* --- CORE CSS STYLING --- */
         body { background-color: #000; color: #fff; font-family: sans-serif; margin: 0; padding: 10px; -webkit-text-size-adjust: 100%; }
         .container { max-width: 1400px; margin: auto; text-align: center; }
         h1 { margin-bottom: 2px; text-transform: uppercase; letter-spacing: 2px; font-size: 1.5rem; }
@@ -25,10 +25,13 @@
         }
         button:hover { background: #333; }
         .secondary { background: transparent; border: 1px solid #444; color: #aaa; }
+        
+        /* Floating Save Button */
         .save-all-btn { background: #1a4a1a; color: #afffaf; border-color: #2a6a2a; position: sticky; top: 10px; z-index: 100; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         
-        /* Checkout Specific Button */
+        /* Action Specific Buttons */
         .checkout-confirm-btn { background: #d42a2a; color: white; border: none; font-weight: bold; margin-top: 15px; padding: 20px; width: 100%; border-radius: 8px; font-size: 18px; }
+        .checkin-confirm-btn { background: #2a8ad4; color: white; border: none; font-weight: bold; margin-top: 15px; padding: 20px; width: 100%; border-radius: 8px; font-size: 18px; }
 
         .badge {
             background: #ff4d4d;
@@ -42,7 +45,7 @@
         }
 
         .scan-button-container { display: flex; flex-direction: column; gap: 5px; }
-        #reader, #reader-checkout { width: 100%; max-width: 500px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #000; }
+        #reader, #reader-checkout, #reader-checkin { width: 100%; max-width: 500px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #000; }
 
         input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 5px; border: 1px solid #333; background: #111; color: #fff; box-sizing: border-box; font-size: 16px; }
         .hidden { display: none; }
@@ -51,6 +54,7 @@
         .search-input { border: 1px solid #444; background: #0a0a0a; padding-left: 40px; }
         .search-icon { position: absolute; left: 15px; top: 25px; color: #888; pointer-events: none; }
 
+        /* --- TABLE STYLING --- */
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; border-radius: 8px; border: 1px solid #222; }
         table { width: 100%; border-collapse: collapse; background: #050505; min-width: 950px; table-layout: fixed; } 
         
@@ -90,8 +94,8 @@
         .part-cell { display: flex; align-items: center; width: 100%; }
         .url-link { color: #44aaff; text-decoration: none; font-size: 16px; padding: 0 8px; line-height: 1; }
 
+        /* Status Colors */
         .changed-cell { border: 1px solid #00ff00 !important; color: #00ff00 !important; background: rgba(0, 255, 0, 0.05) !important; font-weight: bold; }
-        
         .pending-delete { background-color: rgba(255, 0, 0, 0.3) !important; opacity: 0.6; }
         .pending-delete td { text-decoration: line-through; }
         .low-stock-cell { background-color: rgba(255, 0, 0, 0.15) !important; }
@@ -101,6 +105,7 @@
         .row-del-btn { background: #300; color: #ff9999; border: 1px solid #500; padding: 8px 12px; font-size: 10px; width: auto; margin: 4px; }
         .row-restore-btn { background: #1a4a1a; color: #fff; padding: 8px 12px; font-size: 10px; width: auto; margin: 4px; }
 
+        /* Modals */
         .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; justify-content: center; align-items: center; }
         .modal-content { background: #111; padding: 20px; border-radius: 12px; border: 1px solid #333; width: 95%; max-width: 500px; max-height: 85vh; overflow-y: auto; text-align: left; }
     </style>
@@ -113,9 +118,18 @@
 
     <div id="menu">
         <button onclick="showView('scan')">🔍 ADD/EDIT STOCK</button>
+        <button onclick="startCheckinView()">📥 CHECK IN</button>
         <button onclick="startCheckoutView()">🛒 CHECK OUT</button>
         <button onclick="loadInventory()">📋 VIEW STOCK INVENTORY <span id="low-stock-badge" class="hidden"></span></button>
         <button onclick="showView('reports')">📄 PDF REPORTS</button>
+    </div>
+
+    <div id="view-checkin" class="hidden">
+        <h3>Check In Mode</h3>
+        <p style="color: #888; font-size: 13px;">Scanning for items to add to stock...</p>
+        <div id="reader-checkin"></div>
+        <div id="checkin-status"></div>
+        <button class="secondary" onclick="smartBack()">EXIT CHECK IN</button>
     </div>
 
     <div id="view-checkout" class="hidden">
@@ -184,6 +198,7 @@
     let isDataReady = false;
     let html5QrCode = null;
     let checkoutScanner = null;
+    let checkinScanner = null;
     let isCommitting = false; 
 
     /* --- NAVIGATION & "DIRTY" STATE LOGIC --- */
@@ -225,6 +240,7 @@
     async function smartBack() {
         await stopCamera();
         await stopCheckoutCamera();
+        await stopCheckinCamera();
         if (hasUnsavedChanges()) {
             if (confirm("You have unsaved changes. Exit anyway?")) {
                 isCommitting = true; 
@@ -233,6 +249,96 @@
         } else {
             location.reload();
         }
+    }
+
+    /* --- CHECK IN LOGIC --- */
+
+    async function startCheckinView() {
+        showView('checkin');
+        await syncData(); 
+        if (!checkinScanner) {
+            checkinScanner = new Html5Qrcode("reader-checkin");
+        }
+        const config = { fps: 15, qrbox: { width: 250, height: 150 } };
+        checkinScanner.start(
+            { facingMode: "environment" }, 
+            config, 
+            (barcode) => { handleCheckinScan(barcode); }
+        ).catch(err => {
+            document.getElementById('checkin-status').innerText = "Camera access denied.";
+        });
+    }
+
+    async function stopCheckinCamera() {
+        if (checkinScanner && checkinScanner.isScanning) {
+            try {
+                await checkinScanner.stop();
+            } catch (err) { console.log("Stop failed", err); }
+        }
+    }
+
+    function handleCheckinScan(barcode) {
+        checkinScanner.pause();
+        const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
+        const modal = document.getElementById('modal-container');
+        
+        if (!item) {
+            modal.innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal-content" style="text-align:center;">
+                        <h3 style="color:#ff4d4d;">ITEM NOT FOUND</h3>
+                        <p>Barcode: ${barcode}</p>
+                        <button onclick="resumeCheckin()">TRY NEXT ITEM</button>
+                    </div>
+                </div>`;
+        } else {
+            modal.innerHTML = `
+                <div class="modal-overlay">
+                    <div class="modal-content">
+                        <h2 style="margin:0;">${item[2]}</h2>
+                        <p style="color:#888;">Current Stock: ${item[4]}</p>
+                        <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+                        <p>How many items are you adding?</p>
+                        <div class="qty-container" style="background:#222; border-radius:8px; margin-bottom:15px;">
+                            <button class="qty-btn" style="width:60px; height:60px;" onclick="adjustCheckinQty(-1)">-</button>
+                            <input type="number" id="checkin-qty-input" value="1" min="1" style="text-align:center; font-size:24px; border:none; background:transparent;">
+                            <button class="qty-btn" style="width:60px; height:60px;" onclick="adjustCheckinQty(1)">+</button>
+                        </div>
+                        <button class="checkin-confirm-btn" onclick="confirmCheckin('${barcode}', ${item[4]})">✅ CONFIRM ADDITION</button>
+                        <button class="secondary" onclick="resumeCheckin()">CANCEL</button>
+                    </div>
+                </div>`;
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function adjustCheckinQty(amt) {
+        const input = document.getElementById('checkin-qty-input');
+        input.value = Math.max(1, parseInt(input.value) + amt);
+    }
+
+    function resumeCheckin() {
+        document.getElementById('modal-container').classList.add('hidden');
+        checkinScanner.resume();
+    }
+
+    async function confirmCheckin(barcode, current) {
+        const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
+        const addAmt = parseInt(document.getElementById('checkin-qty-input').value) || 0;
+        const body = {
+            action: "save",
+            barcode: barcode,
+            description: item[2],
+            category: item[3],
+            actual_stock: parseInt(current) + addAmt,
+            min_required: item[5],
+            supplier: item[6],
+            supplier_part_num: item[7]
+        };
+        document.querySelector('.modal-content').innerHTML = "<h3>Updating Google Sheets...</h3>";
+        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
+        resumeCheckin();
+        syncData(); 
     }
 
     /* --- CHECK OUT LOGIC --- */
@@ -367,7 +473,7 @@
         suppliers.forEach(s => { sList.innerHTML += `<option value="${s}">`; });
     }
 
-    /* --- INVENTORY DASHBOARD --- */
+    /* --- INVENTORY DASHBOARD LOGIC --- */
 
     async function loadInventory() {
         showView('inventory');
@@ -555,7 +661,7 @@
         loadInventory(); 
     }
 
-    /* --- BARCODE & FORM LOGIC --- */
+    /* --- BARCODE FORM LOGIC (ADD/EDIT) --- */
 
     function openManualAdd() {
         showView('scan');
@@ -642,7 +748,7 @@
         location.reload();
     }
 
-    /* --- PDF GENERATION --- */
+    /* --- PDF GENERATION LOGIC --- */
 
     async function generatePDF(lowOnly) {
         const status = document.getElementById('pdfStatus');
@@ -671,6 +777,7 @@
         doc.save(`A-Diva_StockReport_${fileStamp}.pdf`); status.innerText = "PDF Downloaded.";
     }
 
+    // Initialize data on page load
     window.onload = syncData;
 </script>
 <div id="reader-hidden" style="display: none;"></div>
