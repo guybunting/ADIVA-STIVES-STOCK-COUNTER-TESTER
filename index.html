@@ -56,7 +56,7 @@
 
         /* --- TABLE STYLING --- */
         .table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 20px; border-radius: 8px; border: 1px solid #222; }
-        table { width: 100%; border-collapse: collapse; background: #050505; min-width: 950px; table-layout: fixed; } 
+        table { width: 100%; border-collapse: collapse; background: #050505; min-width: 1050px; table-layout: fixed; } 
         
         th:nth-child(1), td:nth-child(1) { width: 80px; }
         th:nth-child(2), td:nth-child(2) { width: 200px; }
@@ -65,7 +65,8 @@
         th:nth-child(5), td:nth-child(5) { width: 80px; }
         th:nth-child(6), td:nth-child(6) { width: 120px; }
         th:nth-child(7), td:nth-child(7) { width: 220px; }
-        th:nth-child(8), td:nth-child(8) { width: 100px; }
+        th:nth-child(8), td:nth-child(8) { width: 100px; } /* Timestamp Column */
+        th:nth-child(9), td:nth-child(9) { width: 100px; } /* Action Column */
 
         th, td { border: 1px solid #222; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; }
         th { background: #111; color: #888; font-size: 10px; text-transform: uppercase; padding: 10px 6px; cursor: pointer; }
@@ -93,6 +94,7 @@
 
         .part-cell { display: flex; align-items: center; width: 100%; }
         .url-link { color: #44aaff; text-decoration: none; font-size: 16px; padding: 0 8px; line-height: 1; }
+        .timestamp-cell { font-size: 10px; color: #666; text-align: center; padding: 10px 4px; }
 
         /* Status Colors */
         .changed-cell { border: 1px solid #00ff00 !important; color: #00ff00 !important; background: rgba(0, 255, 0, 0.05) !important; font-weight: bold; }
@@ -129,7 +131,7 @@
         <p style="color: #888; font-size: 13px;">Scanning for items to add to stock...</p>
         <div id="reader-checkin"></div>
         <div id="checkin-status"></div>
-        <button class="secondary" onclick="smartBack()">EXIT CHECK IN</button>
+        <button id="checkin-exit-btn" class="secondary" onclick="handleSessionExit('checkin')">EXIT CHECK IN</button>
     </div>
 
     <div id="view-checkout" class="hidden">
@@ -137,7 +139,7 @@
         <p style="color: #888; font-size: 13px;">Scanning for items to remove from stock...</p>
         <div id="reader-checkout"></div>
         <div id="checkout-status"></div>
-        <button class="secondary" onclick="smartBack()">EXIT CHECK OUT</button>
+        <button id="checkout-exit-btn" class="secondary" onclick="handleSessionExit('checkout')">EXIT CHECK OUT</button>
     </div>
 
     <div id="view-scan" class="hidden">
@@ -189,11 +191,12 @@
 </div>
 
 <script>
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby8LDn2ebBeCwkhqcqVsd3oGmkw09KbIYUcL4J0bBy7tXtFHgfDK-kNL0qnSBLlzcOV/exec';
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby718yux3J6sq2DW5vsmEHTfGHQpz2DQcPhHcw52Rj33MtLJan3NgB4K9o35cZ3Om7j/exec';
     let rawSheetData = []; 
     let originalDataMap = {}; 
     let pendingChanges = {}; 
     let pendingDeletions = new Set();
+    let sessionChanges = {}; 
     let sortConfig = { key: 'desc', dir: 1 };
     let isDataReady = false;
     let html5QrCode = null;
@@ -201,13 +204,24 @@
     let checkinScanner = null;
     let isCommitting = false; 
 
+    /* --- HELPERS --- */
+    function getNowStr() {
+        const now = new Date();
+        const d = String(now.getDate()).padStart(2, '0');
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        return `${d}/${m} ${h}:${min}`;
+    }
+
     /* --- NAVIGATION & "DIRTY" STATE LOGIC --- */
 
     function hasUnsavedChanges() {
         if (isCommitting) return false; 
         const dashboardChanges = Object.keys(pendingChanges).length > 0 || pendingDeletions.size > 0;
+        const sessionActive = Object.keys(sessionChanges).length > 0;
         const formVisible = !document.getElementById('stockForm').classList.contains('hidden');
-        return dashboardChanges || formVisible;
+        return dashboardChanges || sessionActive || formVisible;
     }
 
     window.addEventListener('beforeunload', function (e) {
@@ -241,6 +255,7 @@
         await stopCamera();
         await stopCheckoutCamera();
         await stopCheckinCamera();
+        
         if (hasUnsavedChanges()) {
             if (confirm("You have unsaved changes. Exit anyway?")) {
                 isCommitting = true; 
@@ -248,6 +263,92 @@
             }
         } else {
             location.reload();
+        }
+    }
+
+    /* --- BATCH UPDATE LOGIC (FOR CHECK IN / CHECK OUT) --- */
+
+    function handleSessionExit(type) {
+        const sessionCount = Object.keys(sessionChanges).length;
+        if (sessionCount > 0) {
+            reviewSessionChanges();
+        } else {
+            smartBack();
+        }
+    }
+
+    function reviewSessionChanges() {
+        const modal = document.getElementById('modal-container');
+        let log = "";
+        
+        for (const bc in sessionChanges) {
+            const item = sessionChanges[bc];
+            const originalRecord = rawSheetData.find(r => r[1] && r[1].toString() === bc);
+            const oldStock = originalRecord ? originalRecord[4] : 0;
+            
+            log += `
+                <div style="border-bottom:1px solid #333; padding:10px 0;">
+                    <strong>${item.description}</strong><br/>
+                    <span style="color:#0f0; font-size:12px;">Stock: ${oldStock} → ${item.actual_stock}</span>
+                </div>`;
+        }
+
+        modal.innerHTML = `
+            <div class="modal-overlay">
+                <div class="modal-content">
+                    <h3>Review Session Changes</h3>
+                    ${log}
+                    <button onclick="commitSessionChanges()">✅ CONFIRM & SYNC</button>
+                    <button class="secondary" onclick="document.getElementById('modal-container').classList.add('hidden')">CONTINUE SCANNING</button>
+                </div>
+            </div>`;
+        modal.classList.remove('hidden');
+    }
+
+    async function commitSessionChanges() {
+        const btn = document.querySelector('.modal-content button');
+        const modal = document.getElementById('modal-container');
+        btn.innerText = "SAVING SESSION..."; btn.disabled = true;
+        
+        isCommitting = true;
+        const now = getNowStr();
+        for (const bc in sessionChanges) {
+            const item = sessionChanges[bc];
+            await fetch(SCRIPT_URL, { 
+                method: 'POST', 
+                mode: 'no-cors', 
+                body: JSON.stringify({ 
+                    action: "save", 
+                    barcode: bc, 
+                    description: item.description, 
+                    category: item.category, 
+                    actual_stock: item.actual_stock, 
+                    min_required: item.min_required, 
+                    supplier: item.supplier, 
+                    supplier_part_num: item.supplier_part_num,
+                    last_updated: now 
+                }) 
+            });
+        }
+        
+        sessionChanges = {};
+        isCommitting = false;
+        location.reload();
+    }
+
+    function updateSessionExitButton(type) {
+        const btn = document.getElementById(`${type}-exit-btn`);
+        const count = Object.keys(sessionChanges).length;
+        if (count > 0) {
+            btn.innerText = `💾 SAVE & EXIT (${count})`;
+            btn.style.background = "#1a4a1a";
+            btn.style.color = "#afffaf";
+            btn.style.borderColor = "#2a6a2a";
+        } else {
+            btn.innerText = `EXIT ${type.toUpperCase()}`;
+            btn.style.background = "";
+            btn.style.color = "";
+            btn.style.borderColor = "";
         }
     }
 
@@ -292,11 +393,13 @@
                     </div>
                 </div>`;
         } else {
+            const currentStock = sessionChanges[barcode] ? sessionChanges[barcode].actual_stock : item[4];
+            
             modal.innerHTML = `
                 <div class="modal-overlay">
                     <div class="modal-content">
                         <h2 style="margin:0;">${item[2]}</h2>
-                        <p style="color:#888;">Current Stock: ${item[4]}</p>
+                        <p style="color:#888;">Stock (Current): ${currentStock}</p>
                         <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
                         <p>How many items are you adding?</p>
                         <div class="qty-container" style="background:#222; border-radius:8px; margin-bottom:15px;">
@@ -304,7 +407,7 @@
                             <input type="number" id="checkin-qty-input" value="1" min="1" style="text-align:center; font-size:24px; border:none; background:transparent;">
                             <button class="qty-btn" style="width:60px; height:60px;" onclick="adjustCheckinQty(1)">+</button>
                         </div>
-                        <button class="checkin-confirm-btn" onclick="confirmCheckin('${barcode}', ${item[4]})">✅ CONFIRM ADDITION</button>
+                        <button class="checkin-confirm-btn" onclick="confirmCheckinLocal('${barcode}', ${currentStock})">✅ ADD TO SESSION</button>
                         <button class="secondary" onclick="resumeCheckin()">CANCEL</button>
                     </div>
                 </div>`;
@@ -322,12 +425,11 @@
         checkinScanner.resume();
     }
 
-    async function confirmCheckin(barcode, current) {
+    function confirmCheckinLocal(barcode, current) {
         const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
         const addAmt = parseInt(document.getElementById('checkin-qty-input').value) || 0;
-        const body = {
-            action: "save",
-            barcode: barcode,
+        
+        sessionChanges[barcode] = {
             description: item[2],
             category: item[3],
             actual_stock: parseInt(current) + addAmt,
@@ -335,10 +437,9 @@
             supplier: item[6],
             supplier_part_num: item[7]
         };
-        document.querySelector('.modal-content').innerHTML = "<h3>Updating Google Sheets...</h3>";
-        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
+        
+        updateSessionExitButton('checkin');
         resumeCheckin();
-        syncData(); 
     }
 
     /* --- CHECK OUT LOGIC --- */
@@ -382,14 +483,16 @@
                     </div>
                 </div>`;
         } else {
+            const currentStock = sessionChanges[barcode] ? sessionChanges[barcode].actual_stock : item[4];
+            
             modal.innerHTML = `
                 <div class="modal-overlay">
                     <div class="modal-content">
                         <h2 style="margin:0;">${item[2]}</h2>
-                        <p style="color:#888;">Current Stock: ${item[4]}</p>
+                        <p style="color:#888;">Stock (Current): ${currentStock}</p>
                         <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
                         <p>Would you like to remove one from stock?</p>
-                        <button class="checkout-confirm-btn" onclick="confirmCheckout('${barcode}', ${item[4]})">YES, REMOVE 1</button>
+                        <button class="checkout-confirm-btn" onclick="confirmCheckoutLocal('${barcode}', ${currentStock})">YES, REMOVE 1</button>
                         <button class="secondary" onclick="resumeCheckout()">NO, CANCEL</button>
                     </div>
                 </div>`;
@@ -402,11 +505,10 @@
         checkoutScanner.resume();
     }
 
-    async function confirmCheckout(barcode, current) {
+    function confirmCheckoutLocal(barcode, current) {
         const item = rawSheetData.find(r => r[1] && r[1].toString() === barcode);
-        const body = {
-            action: "save",
-            barcode: barcode,
+        
+        sessionChanges[barcode] = {
             description: item[2],
             category: item[3],
             actual_stock: Math.max(0, current - 1),
@@ -414,13 +516,12 @@
             supplier: item[6],
             supplier_part_num: item[7]
         };
-        document.querySelector('.modal-content').innerHTML = "<h3>Updating Google Sheets...</h3>";
-        await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
+        
+        updateSessionExitButton('checkout');
         resumeCheckout();
-        syncData(); 
     }
 
-    /* --- CORE SYNC, DATALISTS & LOW STOCK ALERTS --- */
+    /* --- CORE SYNC & DATA --- */
 
     async function syncData() {
         const badge = document.getElementById('low-stock-badge');
@@ -444,13 +545,11 @@
             if(badge) badge.classList.add('hidden');
             return;
         }
-
         const lowStockCount = rawSheetData.slice(1).filter(r => {
             const stock = parseFloat(r[4] || 0);
             const req = parseFloat(r[5] || 0);
             return r[1] && stock < req;
         }).length;
-
         if (lowStockCount > 0) {
             badge.innerText = `${lowStockCount} REQUIRED`;
             badge.className = 'badge'; 
@@ -490,6 +589,7 @@
         
         let items = rawSheetData.slice(1).filter(r => r[1]).map(r => ({
             bc: r[1], desc: r[2]||'', cat: r[3]||'Uncategorized', stock: r[4]||0, min: r[5]||0, supp: r[6]||'', part: (r[7]||'').toString(),
+            updated: r[8] || '', 
             toOrder: Math.max(0, parseInt(r[5]||0) - parseInt(r[4]||0))
         }));
 
@@ -527,6 +627,7 @@
                                 <th>To Order</th>
                                 <th onclick="setSort('supp')">Supplier</th>
                                 <th onclick="setSort('part')">Part#/URL</th>
+                                <th onclick="setSort('updated')">Last Updated</th>
                                 <th>Action</th>
                             </tr>
                         </thead>
@@ -555,6 +656,7 @@
                                         ${isURL ? `<a href="${i.part}" target="_blank" class="url-link">🔗</a>` : ''}
                                     </div>
                                 </td>
+                                <td class="timestamp-cell">${i.updated}</td>
                                 <td style="text-align:center;">
                                     <button class="row-del-btn" onclick="toggleDelete('${i.bc}')" style="display:${isDel ? 'none' : 'inline-block'}">DEL</button>
                                     <button class="row-restore-btn" onclick="toggleDelete('${i.bc}')" style="display:${isDel ? 'inline-block' : 'none'}">RESTORE</button>
@@ -641,6 +743,7 @@
         btn.innerText = "SAVING..."; btn.disabled = true;
         
         isCommitting = true; 
+        const now = getNowStr();
         
         for (let bc of pendingDeletions) { 
             await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ action: "delete", barcode: bc }) }); 
@@ -648,20 +751,16 @@
         for (const bc in pendingChanges) {
             if(pendingDeletions.has(bc.toString())) continue;
             const i = pendingChanges[bc];
-            await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ action: "save", barcode: bc, description: i.desc, category: i.cat, actual_stock: i.stock, min_required: i.min, supplier: i.supp, supplier_part_num: i.part })});
+            await fetch(SCRIPT_URL, { method:'POST', mode:'no-cors', body: JSON.stringify({ action: "save", barcode: bc, description: i.desc, category: i.cat, actual_stock: i.stock, min_required: i.min, supplier: i.supp, supplier_part_num: i.part, last_updated: now })});
         }
 
-        pendingChanges = {};
-        pendingDeletions.clear();
-        originalDataMap = {}; 
-        isCommitting = false;
-        
+        pendingChanges = {}; pendingDeletions.clear(); originalDataMap = {}; isCommitting = false;
         modal.classList.add('hidden');
         updateSaveButtonState();
         loadInventory(); 
     }
 
-    /* --- BARCODE FORM LOGIC (ADD/EDIT) --- */
+    /* --- BARCODE FORM LOGIC --- */
 
     function openManualAdd() {
         showView('scan');
@@ -731,11 +830,13 @@
     document.getElementById('stockForm').onsubmit = async (e) => {
         e.preventDefault();
         isCommitting = true; 
+        const now = getNowStr();
         const body = {
             action: "save", barcode: document.getElementById('f_barcode').value,
             description: document.getElementById('f_desc').value, category: document.getElementById('f_cat').value,
             actual_stock: document.getElementById('f_actual').value, min_required: document.getElementById('f_min').value,
-            supplier: document.getElementById('f_supp').value, supplier_part_num: document.getElementById('f_part').value
+            supplier: document.getElementById('f_supp').value, supplier_part_num: document.getElementById('f_part').value,
+            last_updated: now
         };
         await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) });
         location.reload();
@@ -749,7 +850,6 @@
     }
 
     /* --- PDF GENERATION LOGIC --- */
-
     async function generatePDF(lowOnly) {
         const status = document.getElementById('pdfStatus');
         status.innerText = "Syncing and generating PDF..."; await syncData();
@@ -777,7 +877,6 @@
         doc.save(`A-Diva_StockReport_${fileStamp}.pdf`); status.innerText = "PDF Downloaded.";
     }
 
-    // Initialize data on page load
     window.onload = syncData;
 </script>
 <div id="reader-hidden" style="display: none;"></div>
