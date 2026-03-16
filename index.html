@@ -65,8 +65,8 @@
         th:nth-child(5), td:nth-child(5) { width: 80px; }
         th:nth-child(6), td:nth-child(6) { width: 120px; }
         th:nth-child(7), td:nth-child(7) { width: 220px; }
-        th:nth-child(8), td:nth-child(8) { width: 100px; } /* Timestamp Column */
-        th:nth-child(9), td:nth-child(9) { width: 100px; } /* Action Column */
+        th:nth-child(8), td:nth-child(8) { width: 100px; } 
+        th:nth-child(9), td:nth-child(9) { width: 100px; } 
 
         th, td { border: 1px solid #222; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; }
         th { background: #111; color: #888; font-size: 10px; text-transform: uppercase; padding: 10px 6px; cursor: pointer; }
@@ -608,9 +608,17 @@
 
         sortedCats.forEach(cat => {
             const section = document.createElement('div');
+            
+            // --- UPDATED SORTING LOGIC (NATURAL SORT) ---
             let sorted = groups[cat].sort((a,b) => {
-                let valA = a[sortConfig.key]; let valB = b[sortConfig.key];
-                if (typeof valA === 'string') return valA.toLowerCase().localeCompare(valB.toLowerCase()) * sortConfig.dir;
+                let valA = a[sortConfig.key]; 
+                let valB = b[sortConfig.key];
+                
+                // Natural sort for strings (handles 1, 2, 10 correctly)
+                if (typeof valA === 'string' && typeof valB === 'string') {
+                    return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * sortConfig.dir;
+                }
+                // Standard sort for numbers
                 return (valA - valB) * sortConfig.dir;
             });
 
