@@ -124,6 +124,7 @@
         <button onclick="startCheckoutView()">🛒 CHECK OUT</button>
         <button onclick="loadInventory()">📋 VIEW STOCK INVENTORY <span id="low-stock-badge" class="hidden"></span></button>
         <button onclick="showView('reports')">📄 PDF REPORTS</button>
+        <button onclick="showView('ordering')">📦 ORDER DIRECT</button>
     </div>
 
     <div id="view-checkin" class="hidden">
@@ -185,6 +186,23 @@
         <button onclick="generatePDF(true)" style="border-color:#ff4d4d; color:#ff4d4d;">DOWNLOAD LOW STOCK ONLY</button>
         <p id="pdfStatus" style="font-size:12px; color:#888; margin-top:10px;"></p>
         <button class="secondary" onclick="location.reload()">BACK TO MENU</button>
+    </div>
+
+    <div id="view-ordering" class="hidden">
+        <h3>Order Direct</h3>
+        <p style="color: #888; font-size: 13px; margin-bottom: 20px;">Select a supplier to generate an import file.</p>
+        
+        <div id="order-section-loreal">
+            <button onclick="exportLorealCSV()" style="border-color: #555;">L'ORÉAL</button>
+        </div>
+
+        <div id="order-instructions" class="hidden" style="margin-top:20px; padding:15px; background:#111; border: 1px solid #333; border-radius: 8px; text-align: left; font-size: 14px; line-height: 1.5;">
+            <p id="order-text"></p>
+            <button id="order-link-btn" onclick="" style="background:#2a8ad4; color:white; border:none; margin-top:10px;">LINK TO STORE</button>
+        </div>
+
+        <p id="orderStatus" style="font-size:12px; color:#888; margin-top:10px;"></p>
+        <button class="secondary" onclick="location.reload()" style="margin-top:20px;">BACK TO MENU</button>
     </div>
 
     <div id="modal-container" class="hidden"></div>
@@ -609,16 +627,13 @@
         sortedCats.forEach(cat => {
             const section = document.createElement('div');
             
-            // --- UPDATED SORTING LOGIC (NATURAL SORT) ---
             let sorted = groups[cat].sort((a,b) => {
                 let valA = a[sortConfig.key]; 
                 let valB = b[sortConfig.key];
                 
-                // Natural sort for strings (handles 1, 2, 10 correctly)
                 if (typeof valA === 'string' && typeof valB === 'string') {
                     return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' }) * sortConfig.dir;
                 }
-                // Standard sort for numbers
                 return (valA - valB) * sortConfig.dir;
             });
 
@@ -883,6 +898,61 @@
             }
         });
         doc.save(`A-Diva_StockReport_${fileStamp}.pdf`); status.innerText = "PDF Downloaded.";
+    }
+
+    /* --- ORDER DIRECT / EXPORT LOGIC --- */
+
+    async function exportLorealCSV() {
+        const status = document.getElementById('orderStatus');
+        const instrDiv = document.getElementById('order-instructions');
+        const instrText = document.getElementById('order-text');
+        const linkBtn = document.getElementById('order-link-btn');
+
+        status.innerText = "Syncing with Google...";
+        await syncData();
+
+        const now = new Date();
+        const fileStamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        
+        // Filter: Supplier is L'Oreal AND needs stock
+        const items = rawSheetData.slice(1).filter(r => {
+            const barcode = r[1];
+            const stock = parseInt(r[4] || 0);
+            const req = parseInt(r[5] || 0);
+            const supplier = (r[6] || "").toString().toLowerCase();
+            return barcode && (supplier === "loreal" || supplier === "l'oreal" || supplier === "l'oréal") && stock < req;
+        });
+
+        if (items.length === 0) {
+            status.innerText = "No L'Oréal items require ordering.";
+            instrDiv.classList.add('hidden');
+            return;
+        }
+
+        // Create CSV Content: Barcode (Col B / Index 1), Qty Required (Req - Actual)
+        let csvContent = "";
+        items.forEach(r => {
+            const barcode = r[1];
+            const qtyNeeded = Math.max(0, parseInt(r[5] || 0) - parseInt(r[4] || 0));
+            csvContent += `${barcode},${qtyNeeded}\n`;
+        });
+
+        // Trigger Download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `A-Diva_LorealOrder_${fileStamp}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Show Instructions
+        status.innerText = "CSV File Downloaded.";
+        instrText.innerText = "Your CSV order file is being downloading. Please head to the L'Oréal using the link below, sign in to your account, select Choose a file button to select the CSV order file, followed by selecting the Upload File button to auto basket your order.";
+        linkBtn.onclick = () => window.open("https://uk.lorealpartnershop.com/en/csvupload/", "_blank");
+        instrDiv.classList.remove('hidden');
     }
 
     window.onload = syncData;
